@@ -1,0 +1,146 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "lumen-launcher/xmcl-runtime/**"
+      - "lumen-launcher/xmcl-runtime-api/**"
+      - "lumen-launcher/xmcl-keystone-ui/**"
+      - "lumen-launcher/xmcl-electron-app/**"
+      - "lumen-launcher/package.json"
+      - "lumen-launcher/pnpm-lock.yaml"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.cache/electron
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.cache/electron-builder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: lumen-launcher/package.json
+
+      - name: Fix node-gyp and Python (Windows)
+        if: runner.os == 'Windows'
+        run: python3 -m pip install --break-system-packages --user packaging setuptools
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ github.workspace }}/.cache/electron
+            ${{ github.workspace }}/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ hashFiles('lumen-launcher/pnpm-lock.yaml') }}
+
+      - name: Cache Vite deps
+        uses: actions/cache@v4
+        with:
+          path: lumen-launcher/xmcl-keystone-ui/node_modules/.vite
+          key: ${{ runner.os }}-vite-${{ hashFiles('lumen-launcher/pnpm-lock.yaml') }}
+
+      - name: Install dependencies
+        working-directory: lumen-launcher
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libarchive-tools
+
+      - name: Build renderer + app
+        working-directory: lumen-launcher
+        run: |
+          pnpm run --prefix xmcl-keystone-ui build
+          pnpm run --prefix xmcl-electron-app build
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_ENV: production
+
+      - name: Zip Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path lumen-launcher/xmcl-electron-app/build/output/win-unpacked/* `
+            -DestinationPath lumen-launcher-windows-x64.zip
+
+      - name: Zip Linux build
+        if: runner.os == 'Linux'
+        run: |
+          cd lumen-launcher/xmcl-electron-app/build/output
+          zip -r ../../../../lumen-launcher-linux-x64.zip linux-unpacked/
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-zip
+          path: lumen-launcher-windows-x64.zip
+
+      - name: Upload artifact (Linux)
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-zip
+          path: lumen-launcher-linux-x64.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all zips
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Get version
+        id: ver
+        run: |
+          echo "version=$(node -p "require('./lumen-launcher/package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Delete existing latest release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest \
+            --title "Lumen Launcher v${{ steps.ver.outputs.version }}" \
+            --notes "## 🌟 Lumen Launcher v${{ steps.ver.outputs.version }}
+
+          | Platform | Descarga |
+          |----------|----------|
+          | 🪟 Windows x64 | \`lumen-launcher-windows-x64.zip\` |
+          | 🐧 Linux x64   | \`lumen-launcher-linux-x64.zip\`   |
+
+          **Instrucciones Windows:** Extrae el ZIP → ejecuta \`lumen-launcher.exe\` (no requiere instalación).
+
+          Build #${{ github.run_number }} · ${{ github.sha }}" \
+            dist/windows-zip/lumen-launcher-windows-x64.zip \
+            dist/linux-zip/lumen-launcher-linux-x64.zip
