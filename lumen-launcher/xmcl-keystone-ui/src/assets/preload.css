@@ -1,0 +1,18 @@
+body {
+  background: transparent;
+}
+
+/* Lumen Launcher — deep black preload background */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #0a0a0a;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  body {
+    background: #f5f5f5;
+  }
+}
+
+
