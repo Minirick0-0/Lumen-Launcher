@@ -20,7 +20,7 @@ export const config = {
   // set this to your own repo!
   publish: [{
     provider: 'github',
-    owner: 'Minirick',
+    owner: 'Minirick0-0',
     repo: 'Lumen-Launcher',
   }],
   files: [{
