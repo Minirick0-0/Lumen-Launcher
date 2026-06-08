@@ -71,18 +71,77 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
           NODE_ENV: production
 
-      - name: Upload Windows build
+      - name: Zip Windows build
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path xmcl-electron-app/build/output/win-unpacked/* `
+            -DestinationPath lumen-launcher-windows-x64.zip
+
+      - name: Zip Linux build
+        if: runner.os == 'Linux'
+        run: |
+          cd xmcl-electron-app/build/output
+          zip -r ../../../lumen-launcher-linux-x64.zip linux-unpacked/
+
+      - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: lumen-launcher-win-b${{ github.run_number }}
-          path: xmcl-electron-app/build/output/win-unpacked/
-          retention-days: 30
+          name: windows-zip
+          path: lumen-launcher-windows-x64.zip
 
-      - name: Upload Linux build
+      - name: Upload artifact (Linux)
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: lumen-launcher-linux-b${{ github.run_number }}
-          path: xmcl-electron-app/build/output/linux-unpacked/
-          retention-days: 30
+          name: linux-zip
+          path: lumen-launcher-linux-x64.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all zips
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./lumen-launcher/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Delete existing latest release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+
+      - name: Create latest release with zips
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create latest \
+            --title "Lumen Launcher v${{ steps.version.outputs.version }} (build #${{ github.run_number }})" \
+            --notes "## Lumen Launcher — Latest Build
+
+          **Build:** #${{ github.run_number }} · Commit: ${{ github.sha }}
+
+          ### Download
+          | Platform | File |
+          |----------|------|
+          | 🪟 Windows (x64) | \`lumen-launcher-windows-x64.zip\` |
+          | 🐧 Linux (x64)   | \`lumen-launcher-linux-x64.zip\`   |
+
+          **Windows:** Extrae el ZIP y ejecuta \`lumen-launcher.exe\` — no requiere instalación.
+          **Linux:** Extrae el ZIP y ejecuta \`./lumen-launcher\`." \
+            --prerelease \
+            dist/windows-zip/lumen-launcher-windows-x64.zip \
+            dist/linux-zip/lumen-launcher-linux-x64.zip
