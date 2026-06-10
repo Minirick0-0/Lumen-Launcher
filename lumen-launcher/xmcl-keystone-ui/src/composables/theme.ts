@@ -103,7 +103,7 @@ export function getDefaultTheme(): UIThemeDataV1 {
     backgroundImage: undefined,
     backgroundImageDark: undefined,
     backgroundImageFit: 'cover',
-    backgroundType: BackgroundType.PANORAMA,
+    backgroundType: BackgroundType.NONE,
     font: undefined,
     fontSize: 16,
     blur: {
