@@ -548,6 +548,7 @@ const backgroundImageFits = computed(() => [
   { value: 'contain', text: t('setting.backgroundImageFit.contain') },
 ])
 const backgroundTypes = computed(() => [
+  { value: BackgroundType.PANORAMA, text: t('setting.backgroundTypes.panorama') },
   { value: BackgroundType.NONE, text: t('setting.backgroundTypes.none') },
   { value: BackgroundType.IMAGE, text: t('setting.backgroundTypes.image') },
   { value: BackgroundType.PARTICLE, text: t('setting.backgroundTypes.particle') },

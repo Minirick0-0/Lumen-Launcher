@@ -3,8 +3,13 @@
     <transition
       name="fade-transition"
     >
+      <MinecraftPanorama
+        v-if="backgroundType === BackgroundType.PANORAMA"
+        class="absolute z-0 h-full w-full"
+        :minecraft-version="minecraftVersion"
+      />
       <Particles
-        v-if="backgroundType === BackgroundType.PARTICLE"
+        v-else-if="backgroundType === BackgroundType.PARTICLE"
         color="#dedede"
         class="absolute z-0 h-full w-full"
         :style="{ filter: `blur(${blur}px)` }"
@@ -47,12 +52,16 @@
 </template>
 <script lang="ts" setup>
 import Halo from '@/components/Halo.vue'
+import MinecraftPanorama from '@/components/MinecraftPanorama.vue'
 import Particles from '@/components/Particles.vue'
+import { kInstance } from '@/composables/instance'
 import { injection } from '@/util/inject'
 import { kTheme, BackgroundType } from '@/composables/theme'
 import { kInstanceLaunch } from '@/composables/instanceLaunch'
 
 const { sideBarColor, backgroundColorOverlay, backgroundColor, blur, backgroundImage, backgroundType, particleMode, backgroundImageFit, volume } = injection(kTheme)
+const { runtime } = injection(kInstance)
+const minecraftVersion = computed(() => runtime.value?.minecraft ?? '')
 const videoRef = ref(null as null | HTMLVideoElement)
 
 const route = useRoute()

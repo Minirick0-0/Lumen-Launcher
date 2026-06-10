@@ -1227,6 +1227,7 @@ setting:
     halo: Halo
     image: Image
     none: None
+    panorama: Minecraft Panorama
     particle: Particle
     video: Video
   backgroundVideo: Background Video

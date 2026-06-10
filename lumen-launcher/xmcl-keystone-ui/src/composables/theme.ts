@@ -18,6 +18,7 @@ export enum ParticleMode {
 
 export enum BackgroundType {
   NONE = 'none',
+  PANORAMA = 'panorama',
   PARTICLE = 'particle',
   HALO = 'halo',
   IMAGE = 'image',
@@ -102,7 +103,7 @@ export function getDefaultTheme(): UIThemeDataV1 {
     backgroundImage: undefined,
     backgroundImageDark: undefined,
     backgroundImageFit: 'cover',
-    backgroundType: BackgroundType.NONE,
+    backgroundType: BackgroundType.PANORAMA,
     font: undefined,
     fontSize: 16,
     blur: {
