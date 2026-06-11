@@ -1,9 +1,9 @@
 <template>
   <button
     class="lumen-play-btn"
-    :disabled="isValidating || (loading && !installing) || !supported"
+    :disabled="isValidating || (loading && !installing)"
     :aria-label="`Play with Lumen Client`"
-    :title="supported ? undefined : `Lumen Client no está disponible para Minecraft ${minecraft}`"
+    :title="supported ? undefined : `Minecraft ${minecraft} no tiene build de Lumen: se usará una instancia Lumen Client dedicada`"
     @click="onLumenClick()"
   >
     <span class="lumen-play-btn__glow" aria-hidden="true" />
@@ -25,7 +25,7 @@
         </span>
         {{ installing ? 'Instalando…' : loading ? t('launch.cancel') : t('launch.launch') }}
       </span>
-      <span class="lumen-play-btn__sub">{{ installed ? 'Lumen Client · Meteor' : 'Lumen Client · se descargará' }}</span>
+      <span class="lumen-play-btn__sub">{{ !supported ? 'Lumen Client · instancia dedicada' : installed ? 'Lumen Client · Meteor' : 'Lumen Client · se descargará' }}</span>
     </span>
   </button>
 </template>
@@ -37,17 +37,37 @@ import { kInstances } from '@/composables/instances'
 import { kLaunchButton } from '@/composables/launchButton'
 import { useLumenClientInstall } from '@/composables/lumenClient'
 import { useNotifier } from '@/composables/notifier'
+import { useService } from '@/composables/service'
 import { injection } from '@/util/inject'
+import { PresenceServiceKey } from '@xmcl/runtime-api'
 
 const { onClick, loading } = injection(kLaunchButton)
 const { isValidating } = injection(kInstances)
 const { fix: fixVersionIssues } = injection(kInstanceVersionInstall)
-const { runtime } = injection(kInstance)
-const { ensureLumenClient, installing, installed, supported } = useLumenClientInstall()
+const { runtime, path } = injection(kInstance)
+const { ensureLumenClient, ensureLumenInstance, installing, installed, supported } = useLumenClientInstall()
+const { setActivity } = useService(PresenceServiceKey)
 const { notify } = useNotifier()
 const { t } = useI18n()
 
 const minecraft = computed(() => runtime.value.minecraft)
+
+function waitForInstance(targetPath: string, timeout = 8000) {
+  if (path.value === targetPath) return Promise.resolve()
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(() => {
+      unwatch()
+      resolve()
+    }, timeout)
+    const unwatch = watch(path, (p) => {
+      if (p === targetPath) {
+        clearTimeout(timer)
+        unwatch()
+        resolve()
+      }
+    })
+  })
+}
 
 async function onLumenClick() {
   // While launching/cancelling, behave exactly like the normal launch button
@@ -55,11 +75,19 @@ async function onLumenClick() {
     return onClick()
   }
   try {
-    await ensureLumenClient()
+    // Switch to (or create) a compatible instance when this Minecraft
+    // version has no Lumen Client build.
+    const target = await ensureLumenInstance()
+    if (target.path !== path.value) {
+      notify({ level: 'info', title: `Cambiando a la instancia ${target.minecraft} de Lumen Client` })
+      await waitForInstance(target.path)
+    }
+    await ensureLumenClient(target)
     // Installing the Fabric loader may leave the version uninstalled; fix it
     // before delegating to the regular launch chain.
     await fixVersionIssues()
     await onClick()
+    setActivity('Jugando con Lumen Client').catch(() => {})
   } catch (e) {
     notify({
       level: 'error',

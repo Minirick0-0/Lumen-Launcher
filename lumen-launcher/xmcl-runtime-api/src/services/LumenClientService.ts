@@ -10,6 +10,12 @@ export interface LumenClientModFile {
    * The download url of the file
    */
   url: string
+  /**
+   * When the file already exists, compare its size against the remote
+   * (HEAD request) and re-download if they differ. Used to auto-update the
+   * client jar, whose file name does not change between builds.
+   */
+  checkUpdate?: boolean
 }
 
 export interface EnsureLumenModsOptions {

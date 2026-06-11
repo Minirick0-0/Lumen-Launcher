@@ -1,5 +1,6 @@
 import { injection } from '@/util/inject'
 import { InstanceModsServiceKey, LumenClientServiceKey } from '@xmcl/runtime-api'
+import { useDialog } from './dialog'
 import { kInstance } from './instance'
 import { useNotifier } from './notifier'
 import { useService } from './service'
@@ -13,6 +14,8 @@ export function useLumenBrowserDownloadImport() {
   const { install } = useService(InstanceModsServiceKey)
   const { path } = injection(kInstance)
   const { notify } = useNotifier()
+  const { show: showImportModpack } = useDialog('HomeDropModpackDialog')
+  const router = useRouter()
 
   const onDone = async ({
     fileName,
@@ -38,10 +41,14 @@ export function useLumenBrowserDownloadImport() {
         notify({ level: 'error', title: `No se pudo instalar ${fileName}` })
       }
     } else {
-      notify({
-        level: 'info',
-        title: `${fileName} guardado en la carpeta browser-downloads del launcher`,
-      })
+      // Modpacks (.mrpack/.zip): open the import dialog so the user can
+      // create an instance from the file right away.
+      if (router.currentRoute.value.path !== '/') {
+        await router.push('/')
+        await nextTick()
+      }
+      showImportModpack(filePath)
+      notify({ level: 'info', title: `${fileName} listo para importar como modpack` })
     }
   }
 

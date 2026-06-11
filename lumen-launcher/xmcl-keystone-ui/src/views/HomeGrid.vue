@@ -52,6 +52,7 @@
           :instance="instance"
           persistent
         />
+        <HomeNewsCard v-else-if="isType(item.i, CardType.News)" />
       </GridItem>
     </GridLayout>
   </div>
@@ -64,6 +65,7 @@ import { injection } from '@/util/inject'
 import debounce from 'lodash.debounce'
 import { GridItem, GridLayout } from 'grid-layout-plus'
 import HomeModCard from './HomeModCard.vue'
+import HomeNewsCard from './HomeNewsCard.vue'
 import HomeResourcePacksCard from './HomeResourcePacksCard.vue'
 import HomeSavesCard from './HomeSavesCard.vue'
 import HomeScreenshotCard from './HomeScreenshotCard.vue'
@@ -77,6 +79,7 @@ enum CardType {
   ShaderPack,
   Save,
   Screenshots,
+  News,
 }
 
 provide(
@@ -119,6 +122,7 @@ const layouts = useLocalStorageCache(
       { x: 3, y: 0, w: 3, h: 4, minW: 2, minH: 4, i: rawType(CardType.Save) },
       { x: 6, y: 0, w: 3, h: 4, minW: 2, minH: 4, i: rawType(CardType.ShaderPack) },
       { x: 3, y: 4, w: 6, h: 5, minW: 3, minH: 4, i: rawType(CardType.Screenshots) },
+      { x: 0, y: 9, w: 12, h: 6, minW: 3, minH: 4, i: rawType(CardType.News) },
     ],
     lg: [
       { x: 0, y: 0, w: 3, h: 9, minW: 2, minH: 4, i: rawType(CardType.Mod) },
@@ -126,6 +130,7 @@ const layouts = useLocalStorageCache(
       { x: 3, y: 0, w: 3, h: 4, minW: 2, minH: 4, i: rawType(CardType.Save) },
       { x: 6, y: 0, w: 3, h: 4, minW: 2, minH: 4, i: rawType(CardType.ShaderPack) },
       { x: 3, y: 4, w: 6, h: 5, minW: 3, minH: 4, i: rawType(CardType.Screenshots) },
+      { x: 0, y: 9, w: 12, h: 6, minW: 3, minH: 4, i: rawType(CardType.News) },
     ],
     sm: [
       { x: 0, y: 0, w: 2, h: 6, minW: 2, minH: 4, i: rawType(CardType.Mod) },
@@ -140,11 +145,19 @@ const layouts = useLocalStorageCache(
       { x: 0, y: 6, w: 2, h: 6, minW: 2, minH: 4, i: rawType(CardType.ResourcePack) },
       { x: 2, y: 0, w: 2, h: 4, minW: 2, minH: 4, i: rawType(CardType.ShaderPack) },
       { x: 2, y: 8, w: 2, h: 4, minW: 1, minH: 4, i: rawType(CardType.Screenshots) },
+      { x: 0, y: 12, w: 4, h: 6, minW: 2, minH: 4, i: rawType(CardType.News) },
     ],
   }),
   JSON.stringify,
   JSON.parse,
 )
+
+// Layouts cached before the news card existed won't include it — append it
+for (const items of Object.values(layouts.value as Record<string, GridItemType[]>)) {
+  if (Array.isArray(items) && !items.some((it) => Number(it.i.split('@')[0]) === CardType.News)) {
+    items.push({ x: 0, y: 99, w: 6, h: 6, minW: 2, minH: 4, i: rawType(CardType.News) })
+  }
+}
 
 const layout = ref([] as GridItemType[])
 

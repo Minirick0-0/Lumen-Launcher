@@ -4,7 +4,7 @@ import {
   LumenClientServiceKey,
   type LumenClientService as ILumenClientService,
 } from '@xmcl/runtime-api'
-import { ensureDir, pathExists } from 'fs-extra'
+import { ensureDir, pathExists, stat } from 'fs-extra'
 import { join } from 'path'
 import { Inject, LauncherAppKey } from '~/app'
 import { kDownloadOptions } from '~/network'
@@ -37,7 +37,10 @@ export class LumenClientService extends AbstractService implements ILumenClientS
     for (const file of files) {
       const destination = join(modsDir, file.fileName)
       if (await pathExists(destination)) {
-        continue
+        if (!file.checkUpdate || !(await this.isOutdated(destination, file.url))) {
+          continue
+        }
+        this.log(`${file.fileName} is outdated, re-downloading`)
       }
       this.log(`Downloading ${file.fileName} from ${file.url}`)
       await download({
@@ -48,5 +51,21 @@ export class LumenClientService extends AbstractService implements ILumenClientS
       downloaded.push(file.fileName)
     }
     return downloaded
+  }
+
+  /**
+   * Compare the local file size against the remote content-length. When the
+   * remote cannot be reached (offline) the local file is kept as-is.
+   */
+  private async isOutdated(localPath: string, url: string): Promise<boolean> {
+    try {
+      const response = await this.app.fetch(url, { method: 'HEAD', redirect: 'follow' })
+      const remoteSize = Number(response.headers.get('content-length'))
+      if (!response.ok || !remoteSize) return false
+      const localSize = (await stat(localPath)).size
+      return localSize !== remoteSize
+    } catch {
+      return false
+    }
   }
 }
