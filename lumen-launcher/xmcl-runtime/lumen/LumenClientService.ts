@@ -4,7 +4,7 @@ import {
   LumenClientServiceKey,
   type LumenClientService as ILumenClientService,
 } from '@xmcl/runtime-api'
-import { copyFile, ensureDir, pathExists, stat } from 'fs-extra'
+import { copyFile, ensureDir, pathExists, readdir, stat, unlink } from 'fs-extra'
 import { join } from 'path'
 import { Inject, LauncherAppKey } from '~/app'
 import { kDownloadOptions } from '~/network'
@@ -29,13 +29,19 @@ export class LumenClientService extends AbstractService implements ILumenClientS
   }
 
   @Lock('lumen-client-install')
-  async ensureMods({ instancePath, files }: EnsureLumenModsOptions): Promise<string[]> {
+  async ensureMods({ instancePath, files, remove }: EnsureLumenModsOptions): Promise<string[]> {
     const modsDir = join(instancePath, 'mods')
     await ensureDir(modsDir)
     const downloadOptions = await this.app.registry.get(kDownloadOptions)
     const downloaded: string[] = []
+    for (const pattern of remove ?? []) {
+      await this.removeMatching(modsDir, pattern)
+    }
     for (const file of files) {
       const destination = join(modsDir, file.fileName)
+      if (file.replaces) {
+        await this.removeMatching(modsDir, file.replaces, file.fileName)
+      }
       if (await pathExists(destination)) {
         if (!file.checkUpdate || !(await this.isOutdated(destination, file.url))) {
           continue
@@ -61,6 +67,26 @@ export class LumenClientService extends AbstractService implements ILumenClientS
       downloaded.push(file.fileName)
     }
     return downloaded
+  }
+
+  /**
+   * Delete files in the mods folder whose name matches the pattern,
+   * keeping `except` (the file about to be installed) untouched.
+   */
+  private async removeMatching(modsDir: string, pattern: string, except?: string) {
+    let regex: RegExp
+    try {
+      regex = new RegExp(pattern, 'i')
+    } catch {
+      return
+    }
+    const entries = await readdir(modsDir).catch(() => [] as string[])
+    for (const entry of entries) {
+      if (entry !== except && regex.test(entry)) {
+        this.log(`Removing ${entry} (matched ${pattern})`)
+        await unlink(join(modsDir, entry)).catch(() => {})
+      }
+    }
   }
 
   private getBundledMod(fileName: string): string | undefined {

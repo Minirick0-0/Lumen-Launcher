@@ -49,6 +49,17 @@
           to="/store"
         />
 
+        <!-- Lumen Client instance -->
+        <AppSideBarNotchItem
+          data-testid="nav-lumen"
+          :icon-size="iconSize"
+          :tooltip="() => ({ text: 'Lumen Client', direction: tooltipDirection })"
+          clickable
+          @click="goLumen"
+        >
+          <LumenIcon :size="iconSize" colored />
+        </AppSideBarNotchItem>
+
         <div class="sidebar-notch__divider moveable" />
 
         <!-- Instance List (compact mode) -->
@@ -115,8 +126,10 @@
 </template>
 
 <script lang="ts" setup>
+import LumenIcon from '@/components/LumenIcon.vue'
 import PlayerAvatar from '@/components/PlayerAvatar.vue'
 import { useDialog } from '@/composables/dialog'
+import { useLumenClientInstall } from '@/composables/lumenClient'
 import { useInstanceGroup } from '@/composables/instanceGroup'
 import { AddInstanceDialogKey } from '@/composables/instanceTemplates'
 import { kInstances } from '@/composables/instances'
@@ -245,6 +258,16 @@ function onMouseLeave(e: MouseEvent) {
 
 function goMultiplayer() {
   windowController.openMultiplayerWindow()
+}
+
+const { openLumenInstance } = useLumenClientInstall()
+const router = useRouter()
+
+async function goLumen() {
+  await openLumenInstance()
+  if (router.currentRoute.value.path !== '/') {
+    router.push('/')
+  }
 }
 
 watch([autoHide, align, position, scale], ([newAutoHide]) => {

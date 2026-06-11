@@ -30,8 +30,24 @@ export const lumenClientConfig = {
    * Modrinth project ids installed alongside the client, resolved to the
    * right version for the instance's Minecraft version. Fabric API keeps
    * Lumen addons and most companion mods working out of the box.
+   * `replaces` removes outdated copies so the mod stays up to date.
    */
-  modrinthDependencies: ['fabric-api'],
+  modrinthDependencies: [
+    { id: 'fabric-api', replaces: '^fabric-api-.*\\.jar$' },
+  ],
+  /**
+   * Optional mods the user can toggle from the Lumen launch button. Always
+   * resolved to the newest Modrinth version compatible with the instance's
+   * Minecraft version (the same one Meteor/Lumen targets).
+   */
+  optionalMods: [
+    {
+      id: 'viafabricplus',
+      name: 'ViaFabricPlus',
+      description: 'Conéctate a servidores de versiones anteriores de Minecraft',
+      replaces: '^viafabricplus.*\\.jar$',
+    },
+  ],
 }
 
 /**

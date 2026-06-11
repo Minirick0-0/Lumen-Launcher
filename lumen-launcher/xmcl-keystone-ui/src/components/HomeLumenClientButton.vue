@@ -1,36 +1,65 @@
 <template>
-  <button
-    class="lumen-play-btn"
-    :disabled="isValidating || (loading && !installing)"
-    :aria-label="`Play with Lumen Client`"
-    :title="supported ? undefined : `Minecraft ${minecraft} no tiene build de Lumen: se usará una instancia Lumen Client dedicada`"
-    @click="onLumenClick()"
-  >
-    <span class="lumen-play-btn__glow" aria-hidden="true" />
+  <div class="lumen-play-group inline-flex items-stretch">
+    <button
+      class="lumen-play-btn"
+      :disabled="isValidating || (loading && !installing)"
+      :aria-label="`Play with Lumen Client`"
+      :title="supported ? undefined : `Minecraft ${minecraft} no tiene build de Lumen: se usará una instancia Lumen Client dedicada`"
+      @click="onLumenClick()"
+    >
+      <span class="lumen-play-btn__glow" aria-hidden="true" />
 
-    <!-- Lumen icon -->
-    <svg class="lumen-play-btn__icon" width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <rect x="0" y="2.5" width="6" height="2.2" rx="1.1" fill="currentColor"/>
-      <rect x="0" y="7" width="4.8" height="2.2" rx="1.1" fill="currentColor" opacity="0.72"/>
-      <rect x="0" y="11.5" width="3.6" height="2.2" rx="1.1" fill="currentColor" opacity="0.48"/>
-      <path d="M13 4.5L18.5 7.5L13 10.5L7.5 7.5Z" fill="currentColor"/>
-      <path d="M18.5 7.5V13.5L13 16.5V10.5Z" fill="currentColor" opacity="0.62"/>
-      <path d="M7.5 7.5V13.5L13 16.5V10.5Z" fill="currentColor" opacity="0.8"/>
-    </svg>
+      <!-- Lumen icon -->
+      <LumenIcon class="lumen-play-btn__icon" :size="20" />
 
-    <span class="lumen-play-btn__labels">
-      <span class="lumen-play-btn__play">
-        <span v-if="loading || installing">
-          <v-progress-circular indeterminate :size="12" :width="2" class="mr-1" />
+      <span class="lumen-play-btn__labels">
+        <span class="lumen-play-btn__play">
+          <span v-if="loading || installing">
+            <v-progress-circular indeterminate :size="12" :width="2" class="mr-1" />
+          </span>
+          {{ installing ? 'Instalando…' : loading ? t('launch.cancel') : t('launch.launch') }}
         </span>
-        {{ installing ? 'Instalando…' : loading ? t('launch.cancel') : t('launch.launch') }}
+        <span class="lumen-play-btn__sub">{{ !supported ? 'Lumen Client · instancia dedicada' : installed ? 'Lumen Client · Meteor' : 'Lumen Client · se descargará' }}</span>
       </span>
-      <span class="lumen-play-btn__sub">{{ !supported ? 'Lumen Client · instancia dedicada' : installed ? 'Lumen Client · Meteor' : 'Lumen Client · se descargará' }}</span>
-    </span>
-  </button>
+    </button>
+
+    <!-- Optional mods menu -->
+    <v-menu :close-on-content-click="false" location="top">
+      <template #activator="{ props: menuProps }">
+        <button
+          class="lumen-play-options"
+          v-bind="menuProps"
+          aria-label="Opciones de Lumen Client"
+          title="Opciones de Lumen Client"
+        >
+          <v-icon size="16">tune</v-icon>
+        </button>
+      </template>
+      <v-card class="pa-2" min-width="320">
+        <div class="text-xs font-bold opacity-60 px-2 pt-1">Mods opcionales (se aplican al lanzar)</div>
+        <v-list density="compact">
+          <v-list-item v-for="mod in lumenClientConfig.optionalMods" :key="mod.id">
+            <template #prepend>
+              <v-switch
+                :model-value="enabledOptionalMods.includes(mod.id)"
+                density="compact"
+                hide-details
+                color="primary"
+                class="mr-3"
+                @update:model-value="toggleOptionalMod(mod.id)"
+              />
+            </template>
+            <v-list-item-title>{{ mod.name }}</v-list-item-title>
+            <v-list-item-subtitle>{{ mod.description }}</v-list-item-subtitle>
+          </v-list-item>
+        </v-list>
+      </v-card>
+    </v-menu>
+  </div>
 </template>
 
 <script lang="ts" setup>
+import LumenIcon from '@/components/LumenIcon.vue'
 import { kInstance } from '@/composables/instance'
 import { kInstanceVersionInstall } from '@/composables/instanceVersionInstall'
 import { kInstances } from '@/composables/instances'
@@ -38,6 +67,7 @@ import { kLaunchButton } from '@/composables/launchButton'
 import { useLumenClientInstall } from '@/composables/lumenClient'
 import { useNotifier } from '@/composables/notifier'
 import { useService } from '@/composables/service'
+import { lumenClientConfig } from '@/lumen.config'
 import { injection } from '@/util/inject'
 import { PresenceServiceKey } from '@xmcl/runtime-api'
 
@@ -45,9 +75,16 @@ const { onClick, loading } = injection(kLaunchButton)
 const { isValidating } = injection(kInstances)
 const { fix: fixVersionIssues } = injection(kInstanceVersionInstall)
 const { runtime, path } = injection(kInstance)
-const { ensureLumenClient, ensureLumenInstance, installing, installed, supported } = useLumenClientInstall()
-const { setActivity } = useService(PresenceServiceKey)
+const { ensureLumenClient, ensureLumenInstance, installing, installed, supported, enabledOptionalMods } = useLumenClientInstall()
+const { setPlaying } = useService(PresenceServiceKey)
 const { notify } = useNotifier()
+
+function toggleOptionalMod(id: string) {
+  const list = enabledOptionalMods.value
+  enabledOptionalMods.value = list.includes(id)
+    ? list.filter((m) => m !== id)
+    : [...list, id]
+}
 const { t } = useI18n()
 
 const minecraft = computed(() => runtime.value.minecraft)
@@ -86,8 +123,9 @@ async function onLumenClick() {
     // Installing the Fabric loader may leave the version uninstalled; fix it
     // before delegating to the regular launch chain.
     await fixVersionIssues()
+    // Set before launching so the presence survives the game-start event
+    setPlaying('Jugando "Lumen Client"').catch(() => {})
     await onClick()
-    setActivity('Jugando con Lumen Client').catch(() => {})
   } catch (e) {
     notify({
       level: 'error',
@@ -98,6 +136,30 @@ async function onLumenClick() {
 </script>
 
 <style scoped>
+.lumen-play-group {
+  gap: 4px;
+}
+
+.lumen-play-options {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(20, 20, 38, 0.82);
+  backdrop-filter: blur(20px);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  transition: border-color 0.22s ease, color 0.22s ease;
+}
+
+.lumen-play-options:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: rgba(255, 255, 255, 0.95);
+}
+
 .lumen-play-btn {
   position: relative;
   display: inline-flex;

@@ -1,0 +1,66 @@
+name: Watch Meteor Client upstream
+
+# Lumen Client is a fork of Meteor Client. This workflow checks the upstream
+# repository daily and opens an issue when Meteor publishes new commits, so
+# the fork can be rebased and a new client jar shipped.
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare upstream Meteor commit
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST=$(gh api repos/MeteorDevelopment/meteor-client/commits/master --jq '.sha')
+          KNOWN=$(cat .github/meteor-upstream-sha 2>/dev/null || echo "none")
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          if [ "$LATEST" != "$KNOWN" ] && [ "$KNOWN" != "none" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "$LATEST" > .github/meteor-upstream-sha
+
+      - name: Record latest upstream sha
+        run: |
+          if [ -n "$(git status --porcelain .github/meteor-upstream-sha)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add .github/meteor-upstream-sha
+            git commit -m "chore: record Meteor upstream sha"
+            git push
+          fi
+
+      - name: Open update issue
+        if: steps.check.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Meteor Client tiene cambios nuevos upstream"
+          if gh issue list --state open --search "$TITLE" --json title --jq 'length' | grep -qv '^0$'; then
+            echo "Issue already open"
+            exit 0
+          fi
+          gh issue create \
+            --title "$TITLE" \
+            --body "Meteor Client (MeteorDevelopment/meteor-client) tiene commits nuevos en master (último: ${{ steps.check.outputs.latest }}).
+
+          Pasos para actualizar Lumen Client:
+          1. Sincroniza \`lumen-client/\` con el upstream de Meteor (manteniendo el rebrand).
+          2. Compila el jar: \`./gradlew build\` en \`lumen-client/\`.
+          3. Reemplaza \`lumen-launcher/xmcl-electron-app/lumen-mods/lumen-client-<mc>.jar\`.
+          4. Actualiza el asset del prerelease \`lumen-client-<mc>\` para que los launchers instalados se actualicen solos.
+          5. Haz push a main: el CI publica el launcher nuevo automáticamente."

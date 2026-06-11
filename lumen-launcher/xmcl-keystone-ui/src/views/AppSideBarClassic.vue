@@ -45,6 +45,16 @@
           store
         </v-icon>
       </AppSideBarItem>
+
+      <AppSideBarItem
+        data-testid="nav-lumen"
+        v-shared-tooltip.right="() => 'Lumen Client'"
+        clickable
+        aria-label="Lumen Client"
+        @click="goLumen"
+      >
+        <LumenIcon :size="26" colored />
+      </AppSideBarItem>
     </div>
 
     <div class="sidebar__divider" />
@@ -186,8 +196,10 @@
 </template>
 
 <script lang="ts" setup>
+import LumenIcon from '@/components/LumenIcon.vue'
 import PlayerAvatar from '@/components/PlayerAvatar.vue'
 import { useDragAutoScroll } from '@/composables/dragAutoScroll'
+import { useLumenClientInstall } from '@/composables/lumenClient'
 import { kSettingsState } from '@/composables/setting'
 import { useInjectSidebarSettings } from '@/composables/sidebarSettings'
 import { kTheme } from '@/composables/theme'
@@ -222,6 +234,16 @@ function goBack() {
 
 function goMultiplayer() {
   windowController.openMultiplayerWindow()
+}
+
+const { openLumenInstance } = useLumenClientInstall()
+const lumenRouter = useRouter()
+
+async function goLumen() {
+  await openLumenInstance()
+  if (lumenRouter.currentRoute.value.path !== '/') {
+    lumenRouter.push('/')
+  }
 }
 
 // Global hotkey: Alt+Left arrow goes back, mirroring the back button.

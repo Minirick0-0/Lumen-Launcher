@@ -1,6 +1,7 @@
 import { lumenClientConfig } from '@/lumen.config'
 import { clientModrinthV2 } from '@/util/clients'
 import { injection } from '@/util/inject'
+import { useLocalStorage } from '@vueuse/core'
 import { InstanceServiceKey, LumenClientModFile, LumenClientServiceKey } from '@xmcl/runtime-api'
 import { Ref } from 'vue'
 import { kInstance } from './instance'
@@ -22,6 +23,13 @@ export interface LumenClientInstall {
    */
   ensureLumenInstance(): Promise<{ path: string; minecraft: string }>
   ensureLumenClient(target?: { path: string; minecraft: string }): Promise<void>
+  /**
+   * Select the dedicated Lumen Client instance (creating it if needed),
+   * regardless of which instance is currently selected.
+   */
+  openLumenInstance(): Promise<string>
+  /** Modrinth project ids of the optional mods the user enabled */
+  enabledOptionalMods: Ref<string[]>
 }
 
 /**
@@ -40,6 +48,7 @@ export function useLumenClientInstall(): LumenClientInstall {
 
   const installing = ref(false)
   const installed = ref(false)
+  const enabledOptionalMods = useLocalStorage<string[]>('lumen.optionalMods', [])
 
   const minecraft = computed(() => runtime.value.minecraft)
   const supported = computed(() =>
@@ -55,13 +64,16 @@ export function useLumenClientInstall(): LumenClientInstall {
 
   watch([path, minecraft], refresh, { immediate: true })
 
-  async function ensureLumenInstance(): Promise<{ path: string; minecraft: string }> {
-    if (supported.value) {
-      return { path: path.value, minecraft: minecraft.value }
-    }
-    const existing = instances.value.find((i) =>
+  async function findOrCreateLumenInstance(): Promise<{ path: string; minecraft: string }> {
+    const byName = instances.value.find(
+      (i) =>
+        i.name === lumenClientConfig.name &&
+        lumenClientConfig.supportedVersions.includes(i.runtime.minecraft),
+    )
+    const bySupportedVersion = instances.value.find((i) =>
       lumenClientConfig.supportedVersions.includes(i.runtime.minecraft),
     )
+    const existing = byName ?? bySupportedVersion
     if (existing) {
       selectedInstance.value = existing.path
       return { path: existing.path, minecraft: existing.runtime.minecraft }
@@ -74,6 +86,18 @@ export function useLumenClientInstall(): LumenClientInstall {
     })
     selectedInstance.value = created
     return { path: created, minecraft: target }
+  }
+
+  async function ensureLumenInstance(): Promise<{ path: string; minecraft: string }> {
+    if (supported.value) {
+      return { path: path.value, minecraft: minecraft.value }
+    }
+    return findOrCreateLumenInstance()
+  }
+
+  async function openLumenInstance(): Promise<string> {
+    const result = await findOrCreateLumenInstance()
+    return result.path
   }
 
   async function ensureLumenClient(target?: { path: string; minecraft: string }) {
@@ -97,7 +121,7 @@ export function useLumenClientInstall(): LumenClientInstall {
           checkUpdate: true,
         },
       ]
-      for (const projectId of lumenClientConfig.modrinthDependencies) {
+      const resolve = async (projectId: string, replaces?: string) => {
         try {
           const versions = await clientModrinthV2.getProjectVersions(projectId, {
             loaders: ['fabric'],
@@ -106,20 +130,33 @@ export function useLumenClientInstall(): LumenClientInstall {
           const version = versions[0]
           const file = version?.files.find((f) => f.primary) ?? version?.files[0]
           if (file) {
-            files.push({ fileName: file.filename, url: file.url })
+            files.push({ fileName: file.filename, url: file.url, replaces })
           }
         } catch (e) {
           // A missing optional dependency should not block the client install
           console.warn(`Failed to resolve Lumen dependency ${projectId}`, e)
         }
       }
+      for (const dep of lumenClientConfig.modrinthDependencies) {
+        await resolve(dep.id, dep.replaces)
+      }
+      // Optional mods: install the enabled ones (always the newest build for
+      // this Minecraft version), remove the ones the user toggled off
+      const remove: string[] = []
+      for (const mod of lumenClientConfig.optionalMods) {
+        if (enabledOptionalMods.value.includes(mod.id)) {
+          await resolve(mod.id, mod.replaces)
+        } else {
+          remove.push(mod.replaces)
+        }
+      }
 
-      await ensureMods({ instancePath, files })
+      await ensureMods({ instancePath, files, remove })
       installed.value = true
     } finally {
       installing.value = false
     }
   }
 
-  return { ensureLumenClient, ensureLumenInstance, installing, installed, supported }
+  return { ensureLumenClient, ensureLumenInstance, openLumenInstance, installing, installed, supported, enabledOptionalMods }
 }

@@ -12,6 +12,8 @@ export class PresenceService extends AbstractService implements IPresenceService
   private current: SetActivity = {
   }
   private runningGameCount = 0
+  /** Activity kept on screen while the game runs (e.g. Jugando "Lumen Client") */
+  private playingActivity = ''
 
   constructor(@Inject(LauncherAppKey) app: LauncherApp,
     @Inject(kSettings) private settings: SharedState<Settings>,
@@ -46,17 +48,29 @@ export class PresenceService extends AbstractService implements IPresenceService
     launchService.on('minecraft-start', () => {
       this.runningGameCount++
       this.log(`Game started, disabling Discord presence updates (running games: ${this.runningGameCount})`)
-      // Clear the current activity when the first game starts
       if (this.runningGameCount === 1 && this.discord.isConnected) {
-        this.discord.user?.clearActivity().catch((e: any) => {
-          this.warn('Fail to clear discord presence. %o', e)
-        })
+        if (this.playingActivity) {
+          // Keep showing the playing activity (e.g. Jugando "Lumen Client")
+          this.current.details = this.playingActivity
+          this.current.startTimestamp = Date.now()
+          this.discord.user?.setActivity(this.current).catch((e: any) => {
+            this.warn('Fail to set discord presence. %o', e)
+          })
+        } else {
+          // Clear the current activity when the first game starts
+          this.discord.user?.clearActivity().catch((e: any) => {
+            this.warn('Fail to clear discord presence. %o', e)
+          })
+        }
       }
     })
 
     launchService.on('minecraft-exit', () => {
       this.runningGameCount = Math.max(0, this.runningGameCount - 1)
       this.log(`Game exited, re-enabling Discord presence updates if no games running (running games: ${this.runningGameCount})`)
+      if (this.runningGameCount === 0) {
+        this.playingActivity = ''
+      }
     })
 
     // TODO: finish this
@@ -110,6 +124,26 @@ export class PresenceService extends AbstractService implements IPresenceService
     this.current.startTimestamp = Date.now()
     this.current.details = activity
     await this.discord.user?.setActivity(param).catch((e: any) => {
+      this.warn('Fail to set discord presence. %o', e)
+    })
+  }
+
+  async setPlaying(activity: string): Promise<void> {
+    this.playingActivity = activity
+    if (!this.settings.discordPresence) {
+      return
+    }
+    if (!this.discord.isConnected) {
+      try {
+        await this.discord.connect()
+      } catch (e) {
+        return
+      }
+    }
+    this.current.largeImageKey = 'dark_512'
+    this.current.startTimestamp = Date.now()
+    this.current.details = activity
+    await this.discord.user?.setActivity(this.current).catch((e: any) => {
       this.warn('Fail to set discord presence. %o', e)
     })
   }

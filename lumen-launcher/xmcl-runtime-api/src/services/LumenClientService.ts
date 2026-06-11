@@ -16,6 +16,12 @@ export interface LumenClientModFile {
    * client jar, whose file name does not change between builds.
    */
   checkUpdate?: boolean
+  /**
+   * Case-insensitive regex of older files to delete before installing this
+   * one (e.g. `^viafabricplus.*\.jar$` removes outdated versions so the mod
+   * is always up to date without duplicated mod ids).
+   */
+  replaces?: string
 }
 
 export interface EnsureLumenModsOptions {
@@ -27,6 +33,11 @@ export interface EnsureLumenModsOptions {
    * The mod files to ensure
    */
   files: LumenClientModFile[]
+  /**
+   * Case-insensitive regex patterns of file names to delete from the mods
+   * folder (used when an optional mod is toggled off).
+   */
+  remove?: string[]
 }
 
 interface LumenClientServiceEventMap {
