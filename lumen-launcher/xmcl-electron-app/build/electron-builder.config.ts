@@ -32,6 +32,13 @@ export const config = {
     to: '.',
     filter: 'package.json',
   }],
+  // Bundle the Lumen Client jars so the launcher can install them into an
+  // instance without any network access (resources/lumen-mods/*.jar)
+  extraResources: [{
+    from: 'lumen-mods',
+    to: 'lumen-mods',
+    filter: ['**/*.jar'],
+  }],
   artifactName: 'lumen-launcher-${version}-${platform}-${arch}.${ext}',
   appx: {
     displayName: 'Lumen Launcher',

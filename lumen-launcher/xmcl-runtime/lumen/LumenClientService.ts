@@ -4,7 +4,7 @@ import {
   LumenClientServiceKey,
   type LumenClientService as ILumenClientService,
 } from '@xmcl/runtime-api'
-import { ensureDir, pathExists, stat } from 'fs-extra'
+import { copyFile, ensureDir, pathExists, stat } from 'fs-extra'
 import { join } from 'path'
 import { Inject, LauncherAppKey } from '~/app'
 import { kDownloadOptions } from '~/network'
@@ -41,6 +41,16 @@ export class LumenClientService extends AbstractService implements ILumenClientS
           continue
         }
         this.log(`${file.fileName} is outdated, re-downloading`)
+      } else {
+        // The launcher build ships the client jars under resources/lumen-mods;
+        // prefer the bundled copy so the install works offline.
+        const bundled = this.getBundledMod(file.fileName)
+        if (bundled && (await pathExists(bundled))) {
+          this.log(`Copying bundled ${file.fileName}`)
+          await copyFile(bundled, destination)
+          downloaded.push(file.fileName)
+          continue
+        }
       }
       this.log(`Downloading ${file.fileName} from ${file.url}`)
       await download({
@@ -51,6 +61,13 @@ export class LumenClientService extends AbstractService implements ILumenClientS
       downloaded.push(file.fileName)
     }
     return downloaded
+  }
+
+  private getBundledMod(fileName: string): string | undefined {
+    // Electron-only property; absent when running outside the packaged app
+    const resourcesPath = (process as { resourcesPath?: string }).resourcesPath
+    if (!resourcesPath) return undefined
+    return join(resourcesPath, 'lumen-mods', fileName)
   }
 
   /**
