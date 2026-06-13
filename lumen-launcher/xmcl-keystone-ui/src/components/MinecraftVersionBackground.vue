@@ -1,5 +1,9 @@
-<template>
-  <div class="mc-version-bg">
+﻿<template>
+  <div
+    class="mc-version-bg"
+    @mouseenter="showEdit = true"
+    @mouseleave="showEdit = false"
+  >
     <!-- Direct video file -->
     <video
       v-if="directVideoUrl"
@@ -31,6 +35,43 @@
     <div v-else class="mc-version-bg__fallback" />
 
     <div class="mc-version-bg__vignette" />
+
+    <!-- Quick background change button (appears on hover) -->
+    <transition name="mc-bg-fade">
+      <button
+        v-if="showEdit"
+        class="mc-version-bg__edit-btn"
+        title="Cambiar fondo"
+        @click.stop="openEditDialog"
+      >
+        <span class="material-icons" style="font-size:18px">wallpaper</span>
+      </button>
+    </transition>
+
+    <!-- Quick background change dialog -->
+    <v-dialog v-model="editDialog" max-width="480" @click.stop>
+      <v-card>
+        <v-card-title class="text-sm pt-4 px-4">Fondo para Minecraft {{ major }}</v-card-title>
+        <v-card-text class="pb-2">
+          <v-text-field
+            v-model="editUrl"
+            label="URL de YouTube o video mp4/webm"
+            placeholder="https://www.youtube.com/watch?v=..."
+            variant="outlined"
+            density="compact"
+            clearable
+            autofocus
+            hint="Dejar vacio para usar el artwork oficial de Mojang"
+            @keydown.enter="saveEdit"
+          />
+        </v-card-text>
+        <v-card-actions class="px-4 pb-4">
+          <v-spacer />
+          <v-btn variant="text" @click="editDialog = false">Cancelar</v-btn>
+          <v-btn color="primary" variant="tonal" @click="saveEdit">Guardar</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
 </template>
 
@@ -46,13 +87,12 @@ interface PatchNote {
   image?: { url: string }
 }
 
-/** User override (Settings → Appearance) wins over the shipped config */
+/** User override (Settings -> Appearance) wins over the shipped config */
 const overrideKey = computed(() => `lumen.versionVideo.${major.value}`)
 const override = ref(localStorage.getItem(overrideKey.value) ?? '')
 watch(overrideKey, (k) => {
   override.value = localStorage.getItem(k) ?? ''
 })
-// Pick up changes written from the appearance settings in the same window
 function onStorage() {
   override.value = localStorage.getItem(overrideKey.value) ?? ''
 }
@@ -82,7 +122,7 @@ const youtubeEmbedUrl = computed(() => {
   return `https://www.youtube-nocookie.com/embed/${id}?${params}`
 })
 
-// ── Official artwork fallback (launchercontent.mojang.com) ──
+// Official artwork fallback (launchercontent.mojang.com)
 let patchNotesPromise: Promise<PatchNote[]> | undefined
 function getPatchNotes(): Promise<PatchNote[]> {
   if (!patchNotesPromise) {
@@ -112,6 +152,30 @@ watch(
   },
   { immediate: true },
 )
+
+// Quick edit overlay
+const showEdit = ref(false)
+const editDialog = ref(false)
+const editUrl = ref('')
+
+function openEditDialog() {
+  editUrl.value = override.value || lumenVersionVideos[major.value] || ''
+  editDialog.value = true
+}
+
+function saveEdit() {
+  const key = overrideKey.value
+  const url = editUrl.value?.trim() ?? ''
+  if (url) {
+    localStorage.setItem(key, url)
+    override.value = url
+  } else {
+    localStorage.removeItem(key)
+    override.value = ''
+  }
+  window.dispatchEvent(new Event('lumen-version-video-changed'))
+  editDialog.value = false
+}
 </script>
 
 <style scoped>
@@ -164,7 +228,6 @@ watch(
     #07090c;
 }
 
-/* Keep the UI readable on top of any artwork */
 .mc-version-bg__vignette {
   position: absolute;
   inset: 0;
@@ -172,5 +235,40 @@ watch(
     linear-gradient(to top, rgba(0, 0, 0, 0.62) 0%, transparent 38%),
     radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.5) 100%);
   pointer-events: none;
+}
+
+/* Quick-change edit button */
+.mc-version-bg__edit-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+
+.mc-version-bg__edit-btn:hover {
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+}
+
+.mc-bg-fade-enter-active,
+.mc-bg-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.mc-bg-fade-enter-from,
+.mc-bg-fade-leave-to {
+  opacity: 0;
 }
 </style>
